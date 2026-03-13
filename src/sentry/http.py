@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import ssl
 import time
 import warnings
 from io import BytesIO
@@ -59,7 +60,29 @@ def get_server_hostname() -> str:
     return urlparse(options.get("system.url-prefix")).hostname
 
 
-build_session = SafeSession
+def _make_ssl_context_for_tls_minimum(version: str) -> ssl.SSLContext:
+    """Build an SSLContext that enforces a minimum TLS version (e.g. 1.2 or 1.3)."""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    version = version.strip().lower().replace("tls", "").replace(".", "")
+    if version in ("12", "1.2"):
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    elif version in ("13", "1.3"):
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+    else:
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    return ctx
+
+
+def build_session(**kwargs: Any) -> SafeSession:
+    """
+    Return a SafeSession for outbound HTTPS. When system.http-tls-minimum-version
+    is set (e.g. "1.2" or "1.3"), the session uses an SSLContext that enforces
+    that minimum TLS version (FedRAMP/IL4).
+    """
+    tls_min = (options.get("system.http-tls-minimum-version") or "").strip()
+    if tls_min:
+        kwargs.setdefault("ssl_context", _make_ssl_context_for_tls_minimum(tls_min))
+    return SafeSession(**kwargs)
 
 
 def safe_urlopen(
@@ -82,7 +105,7 @@ def safe_urlopen(
     if user_agent is not None:
         warnings.warn("user_agent is no longer used with safe_urlopen")
 
-    with SafeSession() as session:
+    with build_session() as session:
         kwargs = {}
 
         if json:
@@ -170,7 +193,7 @@ def fetch_file(
     logger.debug("Fetching %r from the internet", url)
 
     with contextlib.ExitStack() as ctx:
-        http_session = ctx.enter_context(SafeSession())
+        http_session = ctx.enter_context(build_session())
 
         try:
             start = time.monotonic()

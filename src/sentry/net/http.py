@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+import ssl
 from collections.abc import Callable
 from functools import partial
 from typing import Optional
@@ -153,16 +154,21 @@ class BlacklistAdapter(HTTPAdapter):
         self,
         is_ipaddress_permitted: IsIpAddressPermitted = None,
         max_retries: Retry | int = DEFAULT_RETRIES,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         # If is_ipaddress_permitted is defined, then we pass it as an additional parameter to freshly created
         # `urllib3.connectionpool.ConnectionPool` instances managed by `SafePoolManager`.
         self.is_ipaddress_permitted = is_ipaddress_permitted
+        self.ssl_context = ssl_context
         super().__init__(max_retries=max_retries)
 
     def init_poolmanager(self, connections, maxsize, block=DEFAULT_POOLBLOCK, **pool_kwargs):
         self._pool_connections = connections
         self._pool_maxsize = maxsize
         self._pool_block = block
+        # FedRAMP/IL4: pass through ssl_context so HTTPS pools use minimum TLS version / ciphers.
+        if self.ssl_context is not None:
+            pool_kwargs["ssl_context"] = self.ssl_context
         # Begin custom code.
         self.poolmanager = SafePoolManager(
             num_pools=connections,
@@ -204,12 +210,17 @@ class Session(_Session):
 
 class SafeSession(Session):
     def __init__(
-        self, is_ipaddress_permitted: IsIpAddressPermitted = None, max_retries: Retry | None = None
+        self,
+        is_ipaddress_permitted: IsIpAddressPermitted = None,
+        max_retries: Retry | None = None,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         Session.__init__(self)
         self.headers.update({"User-Agent": USER_AGENT})
         adapter = BlacklistAdapter(
-            is_ipaddress_permitted=is_ipaddress_permitted, max_retries=max_retries
+            is_ipaddress_permitted=is_ipaddress_permitted,
+            max_retries=max_retries,
+            ssl_context=ssl_context,
         )
         self.mount("https://", adapter)
         self.mount("http://", adapter)

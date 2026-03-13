@@ -48,6 +48,12 @@ register(
 register("system.secret-key", flags=FLAG_CREDENTIAL | FLAG_NOSTORE)
 register("system.root-api-key", flags=FLAG_PRIORITIZE_DISK | FLAG_AUTOMATOR_MODIFIABLE)
 register("system.logging-format", default=LoggingFormat.HUMAN, flags=FLAG_NOSTORE)
+# FedRAMP/IL4: minimum TLS version for outbound HTTPS (e.g. "1.2", "1.3"). Empty = use stack default.
+register(
+    "system.http-tls-minimum-version",
+    default="",
+    flags=FLAG_ALLOW_EMPTY | FLAG_PRIORITIZE_DISK | FLAG_AUTOMATOR_MODIFIABLE,
+)
 # This is used for the chunk upload endpoint
 register("system.upload-url-prefix", flags=FLAG_PRIORITIZE_DISK | FLAG_AUTOMATOR_MODIFIABLE)
 

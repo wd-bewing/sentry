@@ -101,4 +101,4 @@ def process_service_hook(
         "X-ServiceHook-Signature": servicehook.build_signature(payload),
     }
 
-    safe_urlopen(url=servicehook.url, data=payload, headers=headers, timeout=5, verify_ssl=False)
+    safe_urlopen(url=servicehook.url, data=payload, headers=headers, timeout=5)

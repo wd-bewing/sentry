@@ -6,7 +6,6 @@ import string
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from datetime import datetime, timezone
-from hashlib import md5
 from typing import TYPE_CHECKING, Any, Literal, Optional, cast, overload
 
 import orjson
@@ -26,6 +25,7 @@ from sentry.issues.issue_occurrence import IssueOccurrence
 from sentry.models.event import EventDict
 from sentry.snuba.events import Columns
 from sentry.spans.grouping.api import load_span_grouping_config
+from sentry.utils.hashlib import md5_text
 from sentry.utils.safe import get_path, trim
 from sentry.utils.strings import truncatechars
 
@@ -282,8 +282,9 @@ class BaseEvent(metaclass=abc.ABCMeta):
         and event_id which together are globally unique. The event body should
         be saved under this key in nodestore so it can be retrieved using the
         same generated id when we only have project_id and event_id.
+        Uses FIPS-aware hashing (SHA-256 in FIPS mode) via sentry.utils.hashlib.
         """
-        return md5(f"{project_id}:{event_id}".encode()).hexdigest()
+        return md5_text(f"{project_id}:{event_id}").hexdigest()
 
     @property
     def project(self) -> Project:

@@ -6,10 +6,10 @@ class SplunkApiClient(ApiClient):
     allow_redirects = False
     metrics_prefix = "integrations.splunk"
 
-    def __init__(self, endpoint, token):
+    def __init__(self, endpoint, token, verify_ssl: bool = True):
         self.endpoint = endpoint
         self.token = token
-        super().__init__(verify_ssl=False)
+        super().__init__(verify_ssl=verify_ssl)
 
     def request(self, data):
         headers = {"Authorization": f"Splunk {self.token}"}

@@ -25,11 +25,11 @@ class JiraClient(ApiClient):
 
     cache_time = 60
 
-    def __init__(self, instance_uri, username, password):
+    def __init__(self, instance_uri, username, password, verify_ssl: bool = True):
         self.base_url = instance_uri.rstrip("/")
         self.username = username
         self.password = password
-        super().__init__(verify_ssl=False)
+        super().__init__(verify_ssl=verify_ssl)
 
     def request(self, method, path, data=None, params=None):
         if self.username and self.password:
