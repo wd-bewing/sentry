@@ -257,8 +257,8 @@ def _get_or_create_single_grouphash(
     """
     Create or retrieve a `GroupHash` record for the given hash.
 
-    When sha256_hash is provided, looks up by sha256_hash first (FIPS 140-3), then by legacy hash.
-    New rows are created with both hash and sha256_hash when sha256_hash is provided.
+    Reuses the single `hash` column: new rows store 64-char SHA-256 when sha256_hash is provided;
+    legacy rows have 32-char MD5. Look up by SHA-256 first, then by MD5.
 
     If `use_caching` is true, and the resulting grouphash has an assigned group, cache the
     `GroupHash` object. (Grouphashes without a group aren't cached because their data is about to
@@ -267,10 +267,10 @@ def _get_or_create_single_grouphash(
     with metrics.timer(
         "grouping.get_or_create_grouphashes.get_or_create_grouphash"
     ) as metrics_tags:
-        # Lookup by sha256 first when available (FIPS dual-read)
+        # Look up by SHA-256 first when we have it (64-char value in hash column)
         if sha256_hash:
             grouphash = GroupHash.objects.filter(
-                project=project, sha256_hash=sha256_hash
+                project=project, hash=sha256_hash
             ).first()
             if grouphash is not None:
                 cache_key = get_grouphash_object_cache_key(grouphash.hash, project.id)
@@ -290,19 +290,13 @@ def _get_or_create_single_grouphash(
 
         grouphash = GroupHash.objects.filter(project=project, hash=hash_value).first()
         if grouphash is not None:
-            # Backfill sha256_hash on read when we have it
-            if sha256_hash and grouphash.sha256_hash is None:
-                GroupHash.objects.filter(pk=grouphash.pk).update(sha256_hash=sha256_hash)
-                grouphash.sha256_hash = sha256_hash
             if use_caching and grouphash.group_id is not None:
                 cache.set(cache_key, grouphash, GROUPHASH_CACHE_EXPIRY_SECONDS)
             return (grouphash, False)
 
-        grouphash = GroupHash.objects.create(
-            project=project,
-            hash=hash_value,
-            sha256_hash=sha256_hash,
-        )
+        # Prefer storing SHA-256 in hash when available (64 chars); else store MD5 (32 chars)
+        stored_hash = sha256_hash if sha256_hash else hash_value
+        grouphash = GroupHash.objects.create(project=project, hash=stored_hash)
 
         # We only want to cache grouphashes which already have a group assigned, because we know any
         # without a group will only stay current in the cache for a few milliseconds (until they get

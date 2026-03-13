@@ -75,9 +75,8 @@ class GroupHash(Model):
         LOCKED_IN_MIGRATION = 1
 
     project = FlexibleForeignKey("sentry.Project", null=True)
-    hash = models.CharField(max_length=32)
-    # SHA-256 of the same grouping input as hash (FIPS 140-3). Null for legacy rows.
-    sha256_hash = models.CharField(max_length=64, null=True, db_index=True)
+    # Grouping hash: 32-char MD5 (legacy) or 64-char SHA-256 (FIPS 140-3). Distinguish by length.
+    hash = models.CharField(max_length=64)
     group = FlexibleForeignKey("sentry.Group", null=True)
 
     # not-null => the event should be discarded

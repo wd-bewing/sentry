@@ -238,7 +238,7 @@ Sentry supports running in FIPS 140-3 mode for deployments that require FIPS-val
 
 ### What is supported in FIPS mode
 
-- **Hashing**: When FIPS mode is on, `sentry.utils.hashlib.md5_text` and `hash_values` use SHA-256 (with 32-char truncation for `md5_text` for key-length compatibility). Grouping hashes are dual-written: MD5 (legacy) and SHA-256 (`GroupHash.sha256_hash`); lookups use SHA-256 first, then fall back to MD5.
+- **Hashing**: When FIPS mode is on, `sentry.utils.hashlib.md5_text` and `hash_values` use SHA-256 (with 32-char truncation for `md5_text` for key-length compatibility). Grouping reuses the single `GroupHash.hash` column: legacy rows have 32-char MD5, new rows store 64-char SHA-256; lookups try SHA-256 first, then MD5.
 - **Encryption**: The `cryptography` package is used for Fernet (encrypted fields, backup), RSA-OAEP (SHA-256), and similar; these use FIPS-approved algorithms. FIPS builds require linking against a FIPS-validated OpenSSL.
 - **TLS**: Uses the system/OpenSSL stack; run on a FIPS-capable base image or host.
 
@@ -249,8 +249,8 @@ Sentry supports running in FIPS 140-3 mode for deployments that require FIPS-val
 
 ### Grouping hashes
 
-- **Current behavior**: Group hashes are stored as MD5 (`GroupHash.hash`) and, for new/backfilled rows, SHA-256 (`GroupHash.sha256_hash`). Lookup is by SHA-256 first, then MD5. Existing rows have `sha256_hash` null until backfilled on read or by a future backfill.
-- **Limitations**: With FIPS mode on, `hashlib.md5()` is not used for non-grouping hashes. Grouping still computes MD5 for backward compatibility; in strict FIPS environments where MD5 is fully disabled, the grouping path may require a build that allows non-security MD5 or a full cutover to SHA-256-only (future work).
+- **Current behavior**: The `GroupHash.hash` column holds either 32-char MD5 (legacy) or 64-char SHA-256 (new rows). Lookup tries SHA-256 first, then MD5. No separate column; length distinguishes the two.
+- **Limitations**: With FIPS mode on, `hashlib.md5()` is not used for non-grouping hashes. Grouping still computes MD5 for backward compatibility so we can find legacy rows; in strict FIPS environments where MD5 is fully disabled, the grouping path may require a build that allows non-security MD5 or a full cutover to SHA-256-only (future work).
 
 ## Pull Requests
 

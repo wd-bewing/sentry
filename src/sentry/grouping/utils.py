@@ -23,8 +23,8 @@ def hash_from_values(values: Iterable[str | int | UUID | ExceptionGroupingCompon
     variants have been constructed, but also used as a hack to compare exception components (by
     stringifying their reprs) when calculating variants for chained exceptions.
 
-    Returns MD5 hex (32 chars). For FIPS-compliant storage use hash_from_values_sha256 and
-    GroupHash.sha256_hash.
+    Returns MD5 hex (32 chars). For FIPS-compliant storage use hash_from_values_sha256 and store
+    the result in GroupHash.hash (64-char column; legacy rows use 32-char MD5).
     """
     result = md5()
     for value in values:
