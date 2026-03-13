@@ -11,7 +11,7 @@ from sentry.grouping.fingerprinting.utils import (
     get_custom_fingerprint_description,
     is_default_fingerprint_var,
 )
-from sentry.grouping.utils import hash_from_values
+from sentry.grouping.utils import hash_from_values, hash_from_values_sha256
 
 if TYPE_CHECKING:
     from sentry.grouping.strategies.base import StrategyConfiguration
@@ -35,6 +35,9 @@ class BaseVariant(ABC):
     def type(self) -> str: ...
 
     def get_hash(self) -> str | None:
+        return None
+
+    def get_hash_sha256(self) -> str | None:
         return None
 
     @property
@@ -109,6 +112,9 @@ class FallbackVariant(BaseVariant):
     def get_hash(self) -> str | None:
         return hash_from_values([])
 
+    def get_hash_sha256(self) -> str | None:
+        return hash_from_values_sha256([])
+
 
 class ComponentVariant(BaseVariant):
     """A variant that produces a hash from the `BaseGroupingComponent` it encloses."""
@@ -156,6 +162,9 @@ class ComponentVariant(BaseVariant):
 
     def get_hash(self) -> str | None:
         return self.root_component.get_hash()
+
+    def get_hash_sha256(self) -> str | None:
+        return self.root_component.get_hash_sha256()
 
     def _get_metadata_as_dict(self) -> Mapping[str, Any]:
         return {"component": self.root_component.as_dict()}
@@ -208,6 +217,9 @@ class CustomFingerprintVariant(BaseVariant):
 
     def get_hash(self) -> str | None:
         return hash_from_values(self.values)
+
+    def get_hash_sha256(self) -> str | None:
+        return hash_from_values_sha256(self.values)
 
     def _get_metadata_as_dict(self) -> FingerprintVariantMetadata:
         return expose_fingerprint_dict(self.values, self.fingerprint_info)
@@ -269,6 +281,17 @@ class SaltedComponentVariant(ComponentVariant):
             else:
                 final_values.append(value)
         return hash_from_values(final_values)
+
+    def get_hash_sha256(self) -> str | None:
+        if not self.root_component.contributes:
+            return None
+        final_values: list[str | int] = []
+        for value in self.values:
+            if is_default_fingerprint_var(value):
+                final_values.extend(self.root_component.iter_values())
+            else:
+                final_values.append(value)
+        return hash_from_values_sha256(final_values)
 
     def _get_metadata_as_dict(self) -> Mapping[str, Any]:
         return {

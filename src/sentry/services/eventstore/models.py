@@ -341,6 +341,10 @@ class BaseEvent(metaclass=abc.ABCMeta):
         hashes_by_variant = {
             variant_name: variant.get_hash() for variant_name, variant in variants.items()
         }
+        hashes_sha256_by_variant = {
+            variant_name: variant.get_hash_sha256()
+            for variant_name, variant in variants.items()
+        }
 
         # Sort the variants so that the system variant (if any) is always last, in order to resolve
         # ambiguities when choosing primary_hash for Snuba
@@ -355,9 +359,17 @@ class BaseEvent(metaclass=abc.ABCMeta):
             for h in (hashes_by_variant[variant_name] for variant_name in sorted_variant_names)
             if h is not None
         ]
+        hashes_sha256 = [
+            h
+            for h in (
+                hashes_sha256_by_variant[variant_name] for variant_name in sorted_variant_names
+            )
+            if h is not None
+        ]
 
         # Write to event before returning
         self.data["hashes"] = hashes
+        self.data["hashes_sha256"] = hashes_sha256 if hashes_sha256 else None
 
         return (hashes, variants)
 

@@ -76,6 +76,8 @@ class GroupHash(Model):
 
     project = FlexibleForeignKey("sentry.Project", null=True)
     hash = models.CharField(max_length=32)
+    # SHA-256 of the same grouping input as hash (FIPS 140-3). Null for legacy rows.
+    sha256_hash = models.CharField(max_length=64, null=True, db_index=True)
     group = FlexibleForeignKey("sentry.Group", null=True)
 
     # not-null => the event should be discarded

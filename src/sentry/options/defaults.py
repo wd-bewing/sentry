@@ -97,6 +97,14 @@ register(
     default=False,
     flags=FLAG_AUTOMATOR_MODIFIABLE,
 )
+# FIPS 140-3 mode: when True, non-grouping hashing uses SHA-256 instead of MD5.
+# Can be set via SENTRY_FIPS_MODE=1 (or true/yes) or the system.fips-mode option.
+register(
+    "system.fips-mode",
+    type=Bool,
+    default=os.environ.get("SENTRY_FIPS_MODE", "").lower() in ("1", "true", "yes"),
+    flags=FLAG_NOSTORE,
+)
 
 # Organization
 register(

@@ -249,10 +249,16 @@ def _grouphash_exists_for_hash_value(hash_value: str, project: Project, use_cach
 
 
 def _get_or_create_single_grouphash(
-    hash_value: str, project: Project, use_caching: bool
+    hash_value: str,
+    project: Project,
+    use_caching: bool,
+    sha256_hash: str | None = None,
 ) -> tuple[GroupHash, bool]:
     """
     Create or retrieve a `GroupHash` record for the given hash.
+
+    When sha256_hash is provided, looks up by sha256_hash first (FIPS 140-3), then by legacy hash.
+    New rows are created with both hash and sha256_hash when sha256_hash is provided.
 
     If `use_caching` is true, and the resulting grouphash has an assigned group, cache the
     `GroupHash` object. (Grouphashes without a group aren't cached because their data is about to
@@ -261,6 +267,17 @@ def _get_or_create_single_grouphash(
     with metrics.timer(
         "grouping.get_or_create_grouphashes.get_or_create_grouphash"
     ) as metrics_tags:
+        # Lookup by sha256 first when available (FIPS dual-read)
+        if sha256_hash:
+            grouphash = GroupHash.objects.filter(
+                project=project, sha256_hash=sha256_hash
+            ).first()
+            if grouphash is not None:
+                cache_key = get_grouphash_object_cache_key(grouphash.hash, project.id)
+                if use_caching and grouphash.group_id is not None:
+                    cache.set(cache_key, grouphash, GROUPHASH_CACHE_EXPIRY_SECONDS)
+                return (grouphash, False)
+
         cache_key = get_grouphash_object_cache_key(hash_value, project.id)
 
         if use_caching:
@@ -271,7 +288,21 @@ def _get_or_create_single_grouphash(
             if got_cache_hit:
                 return (grouphash, False)
 
-        grouphash, created = GroupHash.objects.get_or_create(project=project, hash=hash_value)
+        grouphash = GroupHash.objects.filter(project=project, hash=hash_value).first()
+        if grouphash is not None:
+            # Backfill sha256_hash on read when we have it
+            if sha256_hash and grouphash.sha256_hash is None:
+                GroupHash.objects.filter(pk=grouphash.pk).update(sha256_hash=sha256_hash)
+                grouphash.sha256_hash = sha256_hash
+            if use_caching and grouphash.group_id is not None:
+                cache.set(cache_key, grouphash, GROUPHASH_CACHE_EXPIRY_SECONDS)
+            return (grouphash, False)
+
+        grouphash = GroupHash.objects.create(
+            project=project,
+            hash=hash_value,
+            sha256_hash=sha256_hash,
+        )
 
         # We only want to cache grouphashes which already have a group assigned, because we know any
         # without a group will only stay current in the cache for a few milliseconds (until they get
@@ -281,7 +312,7 @@ def _get_or_create_single_grouphash(
 
             cache.set(cache_key, grouphash, GROUPHASH_CACHE_EXPIRY_SECONDS)
 
-        return (grouphash, created)
+        return (grouphash, True)
 
 
 def get_or_create_grouphashes(
@@ -305,8 +336,14 @@ def get_or_create_grouphashes(
             if _grouphash_exists_for_hash_value(hash_value, project, use_caching)
         ]
 
-    for hash_value in hashes:
-        grouphash, created = _get_or_create_single_grouphash(hash_value, project, use_caching)
+    hashes_list = list(hashes)
+    hashes_sha256 = event.data.get("hashes_sha256") or []
+
+    for i, hash_value in enumerate(hashes_list):
+        sha256_val = hashes_sha256[i] if i < len(hashes_sha256) else None
+        grouphash, created = _get_or_create_single_grouphash(
+            hash_value, project, use_caching, sha256_hash=sha256_val
+        )
 
         if options.get("grouping.grouphash_metadata.ingestion_writes_enabled"):
             try:

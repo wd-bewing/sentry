@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from hashlib import md5
+from hashlib import md5, sha256
 from itertools import islice
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -22,8 +22,24 @@ def hash_from_values(values: Iterable[str | int | UUID | ExceptionGroupingCompon
     Primarily used at the end of the grouping process, to get a final hash value once the all of the
     variants have been constructed, but also used as a hack to compare exception components (by
     stringifying their reprs) when calculating variants for chained exceptions.
+
+    Returns MD5 hex (32 chars). For FIPS-compliant storage use hash_from_values_sha256 and
+    GroupHash.sha256_hash.
     """
     result = md5()
+    for value in values:
+        result.update(force_bytes(value, errors="replace"))
+    return result.hexdigest()
+
+
+def hash_from_values_sha256(
+    values: Iterable[str | int | UUID | ExceptionGroupingComponent],
+) -> str:
+    """
+    Same input semantics as hash_from_values but returns SHA-256 hex (64 chars).
+    Used for FIPS 140-3 and dual-write alongside MD5 in GroupHash.
+    """
+    result = sha256()
     for value in values:
         result.update(force_bytes(value, errors="replace"))
     return result.hexdigest()

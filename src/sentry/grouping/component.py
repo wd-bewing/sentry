@@ -8,7 +8,7 @@ from typing import Any
 
 import sentry_sdk
 
-from sentry.grouping.utils import hash_from_values
+from sentry.grouping.utils import hash_from_values, hash_from_values_sha256
 from sentry.utils.env import in_test_environment
 
 # When a component ID appears here it has a human readable name which also
@@ -201,6 +201,12 @@ class BaseGroupingComponent[ValuesType: str | int | BaseGroupingComponent[Any]](
         """Returns the hash of the values if it contributes."""
         if self.contributes:
             return hash_from_values(self.iter_values())
+        return None
+
+    def get_hash_sha256(self) -> str | None:
+        """Returns the SHA-256 hash of the values if it contributes (for FIPS 140-3)."""
+        if self.contributes:
+            return hash_from_values_sha256(self.iter_values())
         return None
 
     def as_dict(self) -> dict[str, Any]:

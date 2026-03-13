@@ -1,3 +1,4 @@
+import os
 from unittest import TestCase
 
 import pytest
@@ -46,3 +47,33 @@ class HashlibTest(TestCase):
 )
 def test_fnv1a_32_with_mris(value: str, expected_value: int) -> None:
     assert fnv1a_32(value.encode("utf-8")) == expected_value
+
+
+class FipsModeTest(TestCase):
+    """When SENTRY_FIPS_MODE is set, md5_text and hash_values use SHA-256 instead of MD5."""
+
+    def setUp(self) -> None:
+        self._orig = os.environ.get("SENTRY_FIPS_MODE")
+        os.environ["SENTRY_FIPS_MODE"] = "1"
+
+    def tearDown(self) -> None:
+        if self._orig is not None:
+            os.environ["SENTRY_FIPS_MODE"] = self._orig
+        elif "SENTRY_FIPS_MODE" in os.environ:
+            del os.environ["SENTRY_FIPS_MODE"]
+
+    def test_md5_text_returns_32_char_hex_in_fips_mode(self) -> None:
+        h = md5_text("test")
+        hexdigest = h.hexdigest()
+        assert len(hexdigest) == 32
+        assert all(c in "0123456789abcdef" for c in hexdigest)
+
+    def test_md5_text_digest_in_fips_mode(self) -> None:
+        h = md5_text("test")
+        d = h.digest()
+        assert len(d) == 16
+
+    def test_hash_values_returns_64_char_hex_in_fips_mode(self) -> None:
+        result = hash_values(["seed", "test"])
+        assert len(result) == 64
+        assert all(c in "0123456789abcdef" for c in result)

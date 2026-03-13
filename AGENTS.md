@@ -227,6 +227,31 @@ New features should be gated behind a feature flag.
 
 See https://develop.sentry.dev/feature-flags/ for full docs.
 
+## FIPS 140-3
+
+Sentry supports running in FIPS 140-3 mode for deployments that require FIPS-validated cryptography.
+
+### Enabling FIPS mode
+
+- **Environment**: Set `SENTRY_FIPS_MODE=1` (or `true`/`yes`) so that non-grouping hashing (cache keys, rate limits, etc.) uses SHA-256 instead of MD5.
+- **Option**: The `system.fips-mode` option (default from env) can also be set via config.
+
+### What is supported in FIPS mode
+
+- **Hashing**: When FIPS mode is on, `sentry.utils.hashlib.md5_text` and `hash_values` use SHA-256 (with 32-char truncation for `md5_text` for key-length compatibility). Grouping hashes are dual-written: MD5 (legacy) and SHA-256 (`GroupHash.sha256_hash`); lookups use SHA-256 first, then fall back to MD5.
+- **Encryption**: The `cryptography` package is used for Fernet (encrypted fields, backup), RSA-OAEP (SHA-256), and similar; these use FIPS-approved algorithms. FIPS builds require linking against a FIPS-validated OpenSSL.
+- **TLS**: Uses the system/OpenSSL stack; run on a FIPS-capable base image or host.
+
+### Runtime requirements
+
+- Use a FIPS-capable base image (e.g. Red Hat UBI with FIPS, or a image with FIPS OpenSSL and Python built against it). The default `self-hosted/Dockerfile` uses a standard Python image; for FIPS, switch to or document a FIPS base and build steps.
+- The application does not call OpenSSL FIPS APIs directly; compliance depends on the runtime’s OpenSSL and Python builds.
+
+### Grouping hashes
+
+- **Current behavior**: Group hashes are stored as MD5 (`GroupHash.hash`) and, for new/backfilled rows, SHA-256 (`GroupHash.sha256_hash`). Lookup is by SHA-256 first, then MD5. Existing rows have `sha256_hash` null until backfilled on read or by a future backfill.
+- **Limitations**: With FIPS mode on, `hashlib.md5()` is not used for non-grouping hashes. Grouping still computes MD5 for backward compatibility; in strict FIPS environments where MD5 is fully disabled, the grouping path may require a build that allows non-security MD5 or a full cutover to SHA-256-only (future work).
+
 ## Pull Requests
 
 Frontend (`static/`) and backend (`src/`, `tests/`) are **not atomically deployed**. A CI check enforces this.

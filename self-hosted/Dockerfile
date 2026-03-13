@@ -13,6 +13,7 @@ ADD --chmod=755 \
 ARG TARGETARCH
 FROM odiff-${TARGETARCH} AS odiff
 
+# For FIPS 140-3, use a FIPS-capable base (e.g. Red Hat UBI with FIPS OpenSSL) and set SENTRY_FIPS_MODE=1. See AGENTS.md "FIPS 140-3".
 FROM python:3.13.1-slim-bookworm
 
 LABEL maintainer="oss@sentry.io"

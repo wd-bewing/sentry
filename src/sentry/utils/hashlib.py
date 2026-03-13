@@ -1,6 +1,7 @@
 # This future-import is load-bearing, as `hashlib._Hash` is not actually importable.
 from __future__ import annotations
 
+import os
 import hashlib
 from collections.abc import Callable, Iterable
 from hashlib import md5 as _md5
@@ -10,8 +11,44 @@ from typing import Any
 
 from django.utils.encoding import force_bytes
 
+# FIPS 140-3: when SENTRY_FIPS_MODE is set, we use SHA-256 instead of MD5 for non-grouping hashes.
+# We do not import sentry.options here to avoid circular imports (options.manager imports this module).
+_FIPS_MODE_ENV = "SENTRY_FIPS_MODE"
+
+# Truncate SHA-256 hex digest to this length for drop-in replacement of MD5 (32 hex chars).
+_FIPS_KEY_HASH_LEN = 32
+
+
+def _fips_mode() -> bool:
+    return os.environ.get(_FIPS_MODE_ENV, "").lower() in ("1", "true", "yes")
+
+
+class _TruncatedSHA256Digest:
+    """Wrapper that exposes .hexdigest() truncated to _FIPS_KEY_HASH_LEN for key compatibility.
+    .digest() returns first 16 bytes so .digest()[0] and similar use cases work."""
+
+    __slots__ = ("_hash",)
+
+    def __init__(self) -> None:
+        self._hash = _sha256()
+
+    def update(self, data: bytes) -> None:
+        self._hash.update(data)
+
+    def hexdigest(self) -> str:
+        return self._hash.hexdigest()[:_FIPS_KEY_HASH_LEN]
+
+    def digest(self) -> bytes:
+        return self._hash.digest()[:16]
+
 
 def md5_text(*args: Any) -> hashlib._Hash:
+    """Hash text for cache keys, rate limits, etc. In FIPS mode uses SHA-256 (truncated to 32 hex chars)."""
+    if _fips_mode():
+        m = _TruncatedSHA256Digest()
+        for x in args:
+            m.update(force_bytes(x, errors="replace"))
+        return m  # type: ignore[return-value]
     m = _md5()
     for x in args:
         m.update(force_bytes(x, errors="replace"))
@@ -61,12 +98,14 @@ def hash_value(h: hashlib._Hash, value: Any) -> None:
 def hash_values(
     values: Iterable[Any],
     seed: str | None = None,
-    algorithm: Callable[[], hashlib._Hash] = _md5,
+    algorithm: Callable[[], hashlib._Hash] | None = None,
 ) -> str:
     """Returns a hexadecimal hash from an iterable data structure.
-    It uses md5 by default.
-    You can optionally include a seed to help determine where in the code the values where hashed.
+    Uses SHA-256 in FIPS mode, otherwise MD5 by default.
+    You can optionally include a seed to help determine where in the code the values were hashed.
     """
+    if algorithm is None:
+        algorithm = _sha256 if _fips_mode() else _md5
     _hash = algorithm()
     if seed:
         _hash.update(("%s\xff" % seed).encode("utf-8"))
